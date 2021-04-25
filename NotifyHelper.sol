@@ -2,6 +2,7 @@ pragma solidity 0.6.12;
 
 import "./Controllable.sol";
 import "./NoMintRewardPool.sol";
+import "./lib/WhitelistAdminRole.sol";
 
 import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/IBEP20.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/math/SafeMath.sol";
@@ -10,7 +11,7 @@ interface IFeeRewardForwarder {
     function poolNotifyFixedTarget(address _token, uint256 _amount) external;
 }
 
-contract NotifyHelper is Controllable {
+contract NotifyHelper is WhitelistAdminRole, Controllable {
     using SafeMath for uint256;
 
     address public feeRewardForwarder;
@@ -35,7 +36,7 @@ contract NotifyHelper is Controllable {
     function notifyPools(
         uint256[] memory amounts,
         address[] memory pools
-    ) public onlyGovernance {
+    ) public onlyWhitelistAdmin {
         require(amounts.length == pools.length, "Amounts and pools lengths mismatch");
         for (uint256 i = 0; i < pools.length; i++) {
             alreadyNotified[pools[i]] = false;
@@ -65,7 +66,7 @@ contract NotifyHelper is Controllable {
         uint256 profitShareIncentiveForWeek,
         uint256 firstProfitShareTimestamp,
         uint256 sum
-    ) public onlyGovernance {
+    ) public onlyWhitelistAdmin {
         require(amounts.length == pools.length, "Amounts and pools lengths mismatch");
 
         profitShareIncentiveDaily = profitShareIncentiveForWeek.div(7);

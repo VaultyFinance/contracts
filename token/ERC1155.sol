@@ -474,11 +474,6 @@ contract ERC1155Tradable is ERC1155, ERC1155MintBurn, ERC1155Metadata, Ownable, 
         _removeMinter(account);
     }
 
-    function uri(uint256 _id) override public view returns (string memory) {
-        require(_exists(_id), "erc721tradable#uri: NONEXISTENT_TOKEN");
-        return Strings.strConcat(baseMetadataURI, Strings.uint2str(_id));
-    }
-
     /**
      * @dev Returns the total quantity for a token ID
      * @param _id uint256 ID of the token to query

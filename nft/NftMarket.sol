@@ -12,10 +12,16 @@ import "../upgradability/BaseProxyStorage.sol";
 contract NftMarket is ControllableInit, BaseProxyStorage, IUpgradeSource {
     using SafeMath for uint256;
 
-    event CollectionAdded(uint256 indexed collectionId, uint256[] nftIds, uint256 price);
+    enum CollectionKind {
+        Unknown,
+        Random,
+        Redeemable
+    }
+
+    event CollectionAdded(uint256 indexed collectionId, CollectionKind kind, uint256 price);
     event CollectionRemoved(uint256 indexed collectionId);
+    event NftAdded(uint256 indexed collectionId, uint256[] nftIds, uint256[] amounts);
     event NftRedeemed(address indexed user, uint256 indexed collectionId, uint256 id, uint256 price);
-    // event NftRedeemedMultiple(address indexed user, uint256 indexed collectionId, uint256[] ids, uint256[] amounts, uint256 totalCost);
 
     struct CollectionItem {
         uint256 nftId;
@@ -23,6 +29,7 @@ contract NftMarket is ControllableInit, BaseProxyStorage, IUpgradeSource {
     }
 
     struct Collection {
+        CollectionKind kind;
         CollectionItem[] items;
         uint256 price;
     }
@@ -55,14 +62,11 @@ contract NftMarket is ControllableInit, BaseProxyStorage, IUpgradeSource {
         emit CollectionRemoved(collectionId);
     }
 
-    function addCollection(uint256[] memory nftIds, uint256[] memory amounts, uint256 price) public onlyGovernance {
+    function addToCollection(uint256 collectionId, uint256[] memory nftIds, uint256[] memory amounts) public onlyGovernance {
         require(amounts.length == nftIds.length, "arrays do not match");
 
-        uint256 collectionId = lastCollectionId.add(1);
-        lastCollectionId = collectionId;
-
         Collection storage collection = collections[collectionId];
-        collection.price = price;
+        require(collection.kind != CollectionKind.Unknown, "unknown collection");
 
         uint256 length = nftIds.length;
         for (uint256 i = 0; i < length; ++i) {
@@ -72,21 +76,78 @@ contract NftMarket is ControllableInit, BaseProxyStorage, IUpgradeSource {
             }));
         }
 
-        emit CollectionAdded(collectionId, nftIds, price);
+        emit NftAdded(collectionId, nftIds, amounts);
     }
 
-    // Mint 1 random nft from collection directly to the user wallet
-    function redeemFor(address user, uint256 collectionId) public {
+    function createCollection(uint256 price, CollectionKind kind) public onlyGovernance {
+        require(kind == CollectionKind.Random || kind == CollectionKind.Redeemable, "incorrect kind");
+
+        uint256 collectionId = lastCollectionId.add(1);
+        lastCollectionId = collectionId;
+
         Collection storage collection = collections[collectionId];
+        collection.price = price;
+        collection.kind = kind;
+
+        emit CollectionAdded(collectionId, kind, price);
+    }
+    
+    // redeem nft of choice from collection
+    function redeemFor(address user, uint256 collectionId, uint256 nftIndex, uint256 nftId) public {
+        Collection storage collection = collections[collectionId];
+        require(collection.kind == CollectionKind.Redeemable, "kind incorrect");
+
+        uint256 totalItems = collection.items.length;
+        require(totalItems > nftIndex, "index incorrect");
+
+        uint256 price = collection.price;
+        require(
+            lantti.balanceOf(msg.sender) >= price,
+            "not enough LANTTI to redeem nft"
+        );
+
+        CollectionItem memory item = collection.items[nftIndex];
+        require(item.amountLeft > 0, "not enough items"); // should never revert here!
+        require(item.nftId == nftId, "wrong nft"); // in case if previous tx removed NFT from the collection
+
+        if (item.amountLeft == 0) {
+            // delete item
+            collection.items[nftIndex] = collection.items[totalItems - 1];
+            collection.items.pop();
+        } else {
+            collection.items[nftIndex].amountLeft = item.amountLeft;
+        }
+
+        lantti.burn(msg.sender, price);
+        nft.mint(user, nftId, 1, "");
+        emit NftRedeemed(user, collectionId, nftId, price);
+    }
+
+    // Mint 1 random nft from collection
+    function openCollectionFor(address user, uint256 collectionId) public {
+        Collection storage collection = collections[collectionId];
+        require(collection.kind == CollectionKind.Random, "kind incorrect");
 
         uint256 totalItems = collection.items.length;
         require(totalItems > 0, "no items");
+
+        uint256 price = collection.price;
+        require(
+            lantti.balanceOf(msg.sender) >= price,
+            "not enough LANTTI to redeem nft"
+        );
 
         uint256 nextIndex = nextRandom(user) % totalItems;
 
         CollectionItem memory item = collection.items[nextIndex];
         
         require(item.amountLeft > 0, "not enough items"); // should never revert here!
+
+        uint256 nftId = item.nftId;
+        require(
+            nft.totalSupply(nftId).add(1) <= nft.maxSupply(nftId),
+            "max nfts minted"
+        );
 
         item.amountLeft = item.amountLeft.sub(1);
 
@@ -97,17 +158,6 @@ contract NftMarket is ControllableInit, BaseProxyStorage, IUpgradeSource {
         } else {
             collection.items[nextIndex].amountLeft = item.amountLeft;
         }
-
-        uint256 nftId = item.nftId;
-        uint256 price = collection.price;
-        require(
-            lantti.balanceOf(msg.sender) >= price,
-            "not enough LANTTI to redeem nft"
-        );
-        require(
-            nft.totalSupply(nftId).add(1) <= nft.maxSupply(nftId),
-            "max nfts minted"
-        );
 
         lantti.burn(msg.sender, price);
         nft.mint(user, nftId, 1, "");
@@ -127,32 +177,6 @@ contract NftMarket is ControllableInit, BaseProxyStorage, IUpgradeSource {
 
         return nextSeed;
     }
-
-    // Transfer multiple nfts from Mart to the user wallet (need the nfts to be minted to market first)
-    // function transferMultiple(uint256 collectionId, uint256[] memory _nftIds, uint256[] memory _amounts) public {
-    //     require(_nftIds.length == _amounts.length, "arrays do not match");
-
-    //     Collection storage collection = collections[collectionId];
-    //     uint256 price = collection.price;
-
-    //     uint256 totalCost = 0;
-    //     for (uint256 i = 0; i < _nftIds.length; ++i) {
-    //         uint256 nftId = _nftIds[i];
-    //         uint256 redeemAmount = _amounts[i];
-    //         uint256 nftAmount = collection.nfts[nftId];
-
-    //         require(nftAmount >= redeemAmount, "nft not found");
-
-    //         totalCost = totalCost.add(price.mul(redeemAmount));
-    //         collection.nfts[nftId] = nftAmount.sub(redeemAmount);
-    //     }
-
-    //     require(lantti.balanceOf(msg.sender) >= totalCost, "not enough LANTTI to redeem nfts");
-
-    //     lantti.burn(msg.sender, totalCost);
-    //     nft.safeBatchTransferFrom(address(this), msg.sender, _nftIds, _amounts, "");
-    //     emit NftRedeemedMultiple(msg.sender, collectionId, _nftIds, _amounts, totalCost);
-    // }
 
     function onERC1155Received(
         address _operator,
