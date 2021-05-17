@@ -109,7 +109,7 @@ contract LanttiPools is ControllableInit, BaseProxyStorage, IUpgradeSource {
     }
 
     // set the amount of LANTTI generated per day for each token staked
-    function setlanttiPerDay(uint256 pid, uint256 amount) public onlyGovernance {
+    function setLanttiPerDay(uint256 pid, uint256 amount) public onlyGovernance {
         PoolInfo storage pool = poolInfo[pid.sub(1)];
         uint256 blockTime = block.timestamp;
         uint256 lanttiReward = blockTime.sub(pool.lastUpdateTime).mul(pool.lanttiPerDay);

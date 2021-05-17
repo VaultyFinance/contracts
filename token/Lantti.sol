@@ -29,4 +29,12 @@ contract Lantti is MinterRole, BEP20, Governable {
     function burn(address account, uint256 amount) public onlyMinter {
       _burn(account, amount);
     }
+
+    function _transfer(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) internal override {
+      revert("disabled");
+    }
 }

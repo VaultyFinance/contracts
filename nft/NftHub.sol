@@ -17,6 +17,7 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
     using SafeMath for uint256;
 
     uint256 constant BONUS_PRECISION = 10**5;
+    uint256 internal constant TYPE_MASK = uint256(uint128(~0)) << 128;
 
     event Stake(address indexed user, uint256[] nftIds);
     event Unstake(address indexed user, uint256[] nftIds);
@@ -37,14 +38,13 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
     LanttiPools public lanttiPools;
 
     uint256[] public nftSetList;
-    //Highest NftId added to the museum
-    uint256 public highestNftId;
     //SetId mapped to all nft IDs in the set.
     mapping(uint256 => NftSet) public nftSets;
     //NftId to SetId mapping
-    mapping(uint256 => uint256) public nftToSetMap;
+    mapping(uint256 => uint256) public nftToSetId;
+    mapping(uint256 => uint256) public maxNftStake;
     //Status of user's nfts staked mapped to the nftID
-    mapping(address => mapping(uint256 => bool)) public userNfts;
+    mapping(address => mapping(uint256 => uint256)) public userNfts;
     //Last update time for a user's LANTTI rewards calculation
     mapping(address => uint256) public userLastUpdate;
     //Mapping data of booster of a user in a pool. 100% booster
@@ -87,13 +87,13 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
     /**
      * @dev Indexed boolean for whether a nft is staked or not. Index represents the nftId.
      */
-    function getNftsStakedOfAddress(address _user) public view returns (bool[] memory) {
-        bool[] memory nftsStaked = new bool[](highestNftId + 1);
-        for (uint256 i = 0; i < highestNftId + 1; ++i) {
-            nftsStaked[i] = userNfts[_user][i];
-        }
-        return nftsStaked;
-    }
+    // function getNftsStakedOfAddress(address _user) public view returns (bool[] memory) {
+    //     bool[] memory nftsStaked = new bool[](highestNftId + 1);
+    //     for (uint256 i = 0; i < highestNftId + 1; ++i) {
+    //         nftsStaked[i] = userNfts[_user][i];
+    //     }
+    //     return nftsStaked;
+    // }
 
     /**
      * @dev Returns the list of nftIds which are part of a set
@@ -106,7 +106,7 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
      * @dev Returns the boosters associated with a nft Id per pool
      */
     function getBoostersOfNft(uint256 _nftId) external view returns (uint256[] memory) {
-        return nftSets[nftToSetMap[_nftId]].poolBoosts;
+        return nftSets[nftToSetId[_nftId]].poolBoosts;
     }
 
     /**
@@ -125,7 +125,7 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
             uint256[] memory _nftIds = nftSets[setId].nftIds;
 
             for (uint256 j = 0; j < _nftIds.length; ++j) {
-                if (userNfts[_user][_nftIds[j]] == false) {
+                if (userNfts[_user][_nftIds[j]] == 0) {
                     _fullSet = false;
                     break;
                 }
@@ -140,14 +140,15 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
      */
     function getNumOfNftsStakedForSet(address _user, uint256 _setId) public view returns (uint256) {
         uint256 nbStaked = 0;
-        if (nftSets[_setId].isRemoved) {
+        NftSet storage set = nftSets[_setId];
+        if (set.isRemoved) {
             return 0;
         }
 
-        uint256 length = nftSets[_setId].nftIds.length;
+        uint256 length = set.nftIds.length;
         for (uint256 j = 0; j < length; ++j) {
-            uint256 nftId = nftSets[_setId].nftIds[j];
-            if (userNfts[_user][nftId] == true) {
+            uint256 nftId = set.nftIds[j];
+            if (userNfts[_user][nftId] != 0) {
                 nbStaked = nbStaked.add(1);
             }
         }
@@ -189,17 +190,18 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
             uint256 setLanttiPerDay = 0;
 
             for (uint256 j = 0; j < nftLength; ++j) {
-                if (userNfts[_user][set.nftIds[j]] == false) {
+                uint256 nftsStaked = userNfts[_user][set.nftIds[j]];
+                if (nftsStaked == 0) {
                     isFullSet = false;
                     continue;
                 }
-                setLanttiPerDay = setLanttiPerDay.add(set.lanttiPerDayPerNft);
+                setLanttiPerDay = setLanttiPerDay.add(set.lanttiPerDayPerNft.mul(nftsStaked));
             }
 
             if (isFullSet) {
-                setLanttiPerDay = setLanttiPerDay.mul(set.bonusLanttiMultiplier.add(BONUS_PRECISION)).div(
-                    BONUS_PRECISION
-                );
+                setLanttiPerDay = setLanttiPerDay
+                    .mul(set.bonusLanttiMultiplier.add(BONUS_PRECISION))
+                    .div(BONUS_PRECISION);
             }
 
             totalLanttiPerDay = totalLanttiPerDay.add(setLanttiPerDay);
@@ -219,9 +221,14 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
     /**
      * @dev Returns the applicable booster of a user, for a pool, from a staked NFT set.
      */
-    function getBoosterForUser(address _user, uint256 _pid) external override view returns (uint256) {
+    function getBoosterForUser(address _user, uint256 _pid)
+        external
+        view
+        override
+        returns (uint256)
+    {
         _pid = _pid.sub(1);
-        
+
         uint256 totalBooster = 0;
         uint256 length = nftSetList.length;
         for (uint256 i = 0; i < length; ++i) {
@@ -244,12 +251,13 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
             uint256 setBooster = 0;
 
             for (uint256 j = 0; j < nftLength; ++j) {
-                if (!userNfts[_user][set.nftIds[j]]) {
+                uint256 nftsStaked = userNfts[_user][set.nftIds[j]];
+                if (nftsStaked == 0) {
                     isFullSet = false;
                     continue;
                 }
 
-                setBooster = setBooster.add(set.poolBoosts[_pid]);
+                setBooster = setBooster.add(set.poolBoosts[_pid].mul(maxNftStake[nftsStaked]));
             }
 
             if (isFullSet) {
@@ -265,10 +273,10 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
      * @dev Manually sets the highestNftId, if it goes out of sync.
      * Required calculate the range for iterating the list of staked nfts for an address.
      */
-    function setHighestNftId(uint256 _highestId) public onlyGovernance {
-        require(_highestId > 0, "Set if minimum 1 nft is staked.");
-        highestNftId = _highestId;
-    }
+    // function setHighestNftId(uint256 _highestId) public onlyGovernance {
+    //     require(_highestId > 0, "Set if minimum 1 nft is staked.");
+    //     highestNftId = _highestId;
+    // }
 
     /**
      * @dev Adds a nft set with the input param configs. Removes an existing set if the id exists.
@@ -276,30 +284,26 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
     function addNftSet(
         uint256 _setId,
         uint256[] memory _nftIds,
+        uint256[] memory _max,
         uint256 _bonusLanttiMultiplier,
         uint256 _lanttiPerDayPerNft,
         uint256[] memory _poolBoosts,
         uint256 _bonusFullSetBoost,
         bool _isBooster
     ) public onlyGovernance {
+        require(_nftIds.length == _max.length);
+
         removeNftSet(_setId);
         uint256 length = _nftIds.length;
 
-        uint256 _highestNftId = highestNftId;
         for (uint256 i = 0; i < length; ++i) {
             uint256 nftId = _nftIds[i];
-            if (nftId > _highestNftId) {
-                _highestNftId = nftId;
-            }
 
             // Check all nfts to assign arent already part of another set
-            require(nftToSetMap[nftId] == 0, "Nft already assigned to a set");
+            require(nftToSetId[nftId] == 0, "Nft already assigned to a set");
             // Assign to set
-            nftToSetMap[nftId] = _setId;
-        }
-
-        if (_highestNftId != highestNftId) {
-            highestNftId = _highestNftId;
+            nftToSetId[nftId] = _setId;
+            maxNftStake[nftId] = _max[i];
         }
 
         if (!_isInArray(_setId, nftSetList)) {
@@ -360,7 +364,7 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
         uint256 length = nftSets[_setId].nftIds.length;
         for (uint256 i = 0; i < length; ++i) {
             uint256 nftId = nftSets[_setId].nftIds[i];
-            nftToSetMap[nftId] = 0;
+            nftToSetId[nftId] = 0;
         }
         delete nftSets[_setId].nftIds;
         nftSets[_setId].isRemoved = true;
@@ -383,22 +387,46 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
      * @dev Stakes the nfts on providing the nft IDs.
      */
     function stake(uint256[] memory _nftIds) public {
+        stakeAction(_nftIds, true);
+    }
+
+    /**
+     * @dev Unstakes the nfts on providing the nft IDs.
+     */
+    function unstake(uint256[] memory _nftIds) public {
+        stakeAction(_nftIds, false);
+    }
+
+    function stakeAction(uint256[] memory _nftIds, bool stake) private {
         require(_nftIds.length > 0, "you need to stake something");
 
         // Check no nft will end up above max stake and if it is needed to update the user NFT pool
         uint256 length = _nftIds.length;
         bool hasLanttis = false;
         bool onlyNoBoosters = true;
-        for (uint256 i = 0; i < length; ++i) {
-            uint256 nftId = _nftIds[i];
-            require(userNfts[msg.sender][nftId] == false, "already staked");
-            require(nftToSetMap[nftId] != 0, "you can't stake that");
+        uint256 setId;
+        uint256 nftType;
+        NftSet storage nftSet;
 
-            if (nftSets[nftToSetMap[nftId]].lanttiPerDayPerNft > 0) {
+        for (uint256 i = 0; i < length; ++i) {
+            nftType = extractType(_nftIds[i]);
+            setId = nftToSetId[nftType];
+
+            require(setId != 0, "unknown set");
+
+            if (stake) {
+                require(userNfts[msg.sender][nftType] <= maxNftStake[nftType], "max staked");
+                userNfts[msg.sender][nftType]++;
+            } else {
+                require(userNfts[msg.sender][nftType] != 0, "not staked");
+                userNfts[msg.sender][nftType]--;
+            }
+
+            if (nftSets[setId].lanttiPerDayPerNft > 0) {
                 hasLanttis = true;
             }
 
-            if (nftSets[nftToSetMap[nftId]].isBooster) {
+            if (nftSets[setId].isBooster) {
                 onlyNoBoosters = false;
             }
         }
@@ -411,11 +439,14 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
         // Harvest each pool where booster value will be modified
         if (!onlyNoBoosters) {
             for (uint256 i = 0; i < length; ++i) {
-                uint256 nftId = _nftIds[i];
-                if (nftSets[nftToSetMap[nftId]].isBooster) {
-                    NftSet storage nftSet = nftSets[nftToSetMap[nftId]];
+                nftType = extractType(_nftIds[i]);
+                setId = nftToSetId[nftType];
+
+                if (nftSets[setId].isBooster) {
+                    nftSet = nftSets[setId];
                     uint256 boostLength = nftSet.poolBoosts.length;
-                    for (uint256 j = 1; j <= boostLength; ++j) { // pool ID starts from 1
+                    for (uint256 j = 1; j <= boostLength; ++j) {
+                        // pool ID starts from 1
                         if (
                             nftSet.poolBoosts[j - 1] > 0 &&
                             lanttiPools.pendingLantti(j, msg.sender) > 0
@@ -434,73 +465,13 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
             amounts[i] = 1;
         }
 
-        nft.safeBatchTransferFrom(msg.sender, address(this), _nftIds, amounts, "");
-        //Update the staked status for the nft ID.
-        for (uint256 i = 0; i < length; ++i) {
-            uint256 nftId = _nftIds[i];
-            userNfts[msg.sender][nftId] = true;
+        if (stake) {
+            nft.safeBatchTransferFrom(msg.sender, address(this), _nftIds, amounts, "");
+            emit Stake(msg.sender, _nftIds);
+        } else {
+            nft.safeBatchTransferFrom(address(this), msg.sender, _nftIds, amounts, "");
+            emit Unstake(msg.sender, _nftIds);
         }
-
-        emit Stake(msg.sender, _nftIds);
-    }
-
-    /**
-     * @dev Unstakes the nfts on providing the nft IDs.
-     */
-    function unstake(uint256[] memory _nftIds) public {
-        require(_nftIds.length > 0, "input at least 1 nft id");
-
-        // Check if all nfts are staked and if it is needed to update the user NFT pool
-        uint256 length = _nftIds.length;
-        bool hasLanttis = false;
-        bool onlyNoBoosters = true;
-
-        for (uint256 i = 0; i < length; ++i) {
-            uint256 nftId = _nftIds[i];
-            require(userNfts[msg.sender][nftId] == true, "not staked");
-
-            if (nftSets[nftToSetMap[nftId]].lanttiPerDayPerNft > 0) {
-                hasLanttis = true;
-            }
-
-            if (nftSets[nftToSetMap[nftId]].isBooster) {
-                onlyNoBoosters = false;
-            }
-        }
-
-        if (hasLanttis) {
-            harvest();
-        }
-
-        // Harvest each pool where booster value will be modified
-        if (!onlyNoBoosters) {
-            for (uint256 i = 0; i < length; ++i) {
-                uint256 nftId = _nftIds[i];
-                if (nftSets[nftToSetMap[nftId]].isBooster) {
-                    NftSet storage nftSet = nftSets[nftToSetMap[nftId]];
-                    uint256 boostLength = nftSet.poolBoosts.length;
-                    for (uint256 j = 1; j <= boostLength; ++j) { // pool ID starts from 1
-                        if (
-                            nftSet.poolBoosts[j - 1] > 0 &&
-                            lanttiPools.pendingLantti(j, msg.sender) > 0
-                        ) {
-                            address staker = msg.sender;
-                            lanttiPools.withdraw(j, 0, staker);
-                        }
-                    }
-                }
-            }
-        }
-
-        //UnStake 1 unit of each nftId
-        uint256[] memory amounts = new uint256[](_nftIds.length);
-        for (uint256 i = 0; i < _nftIds.length; ++i) {
-            userNfts[msg.sender][_nftIds[i]] = false;
-            amounts[i] = 1;
-        }
-
-        nft.safeBatchTransferFrom(address(this), msg.sender, _nftIds, amounts, "");
-        emit Unstake(msg.sender, _nftIds);
     }
 
     /**
@@ -508,24 +479,29 @@ contract NftHub is ControllableInit, BaseProxyStorage, IUpgradeSource, INftHub {
      */
     function emergencyUnstake(uint256[] memory _nftIds) public {
         userLastUpdate[msg.sender] = block.timestamp;
+
+        uint256[] memory amounts = new uint256[](_nftIds.length);
         uint256 length = _nftIds.length;
         for (uint256 i = 0; i < length; ++i) {
-            uint256 nftId = _nftIds[i];
-            require(userNfts[msg.sender][nftId] == true, "Nft not staked");
-            userNfts[msg.sender][nftId] = false;
+            uint256 nftType = extractType(_nftIds[i]);
+
+            uint256 nftsStaked = userNfts[msg.sender][nftType];
+            require(nftsStaked != 0, "Nft not staked");
+
+            amounts[i] = 1;
+            userNfts[msg.sender][nftType]--;
         }
 
-        //UnStake 1 unit of each nftId
-        uint256[] memory amounts = new uint256[](_nftIds.length);
-        for (uint256 i = 0; i < _nftIds.length; ++i) {
-            amounts[i] = 1;
-        }
         nft.safeBatchTransferFrom(address(this), msg.sender, _nftIds, amounts, "");
     }
 
     // update pot address if the pot logic changed.
     function updateLanttiPoolsAddress(LanttiPools _pools) public onlyGovernance {
         lanttiPools = _pools;
+    }
+
+    function extractType(uint256 nftId) private pure returns (uint256) {
+        return nftId & TYPE_MASK;
     }
 
     /**

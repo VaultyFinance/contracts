@@ -9,7 +9,6 @@ import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/IBEP20.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/math/SafeMath.sol";
 import "./interfaces/pancakeswap/IPancakeRouter02.sol";
 
-// FeeRewardForwarder with no grain config
 contract FeeRewardForwarder is Governable {
   using SafeBEP20 for IBEP20;
   using SafeMath for uint256;
@@ -19,23 +18,28 @@ contract FeeRewardForwarder is Governable {
   address constant public xvs = address(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63);
 
   // wbnb
-  address constant public wbnb = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+  address constant public wbnb = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
 
-  mapping (address => mapping (address => address[])) public pancakeswapRoutes;
+  mapping (address => address[]) public pancakeswapRoutes;
 
   // the targeted reward token to convert everything to
-  address public targetToken = wbnb;
+  address public targetToken;
   address public profitSharingPool;
 
-  address constant public pancakeswapRouterV2 = address(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
+  address public pancakeswapRouterV2; // 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
 
   event TokenPoolSet(address token, address pool);
 
-  constructor(address _storage, address _targetToken) public Governable(_storage) {
+  constructor(
+    address _storage, 
+    address _targetToken,
+    address _router
+  ) public Governable(_storage) {
     targetToken = _targetToken;
+    pancakeswapRouterV2 = _router;
 
-    pancakeswapRoutes[cake][_targetToken] = [cake, wbnb, _targetToken];
-    pancakeswapRoutes[xvs][_targetToken] = [xvs, wbnb, _targetToken];
+    pancakeswapRoutes[cake] = [cake, wbnb, _targetToken];
+    pancakeswapRoutes[xvs] = [xvs, wbnb, _targetToken];
   }
 
   /*
@@ -53,7 +57,7 @@ contract FeeRewardForwarder is Governable {
   * so that we could first update the paths, and then,
   * set the new target
   */
-  function setConversionPath(address from, address to, address[] memory _pancakeswapRoute)
+  function setConversionPath(address from, address[] memory _pancakeswapRoute)
     public
     onlyGovernance
   {
@@ -62,24 +66,24 @@ contract FeeRewardForwarder is Governable {
       "The first token of the Pancakeswap route must be the from token"
     );
     require(
-      to == _pancakeswapRoute[_pancakeswapRoute.length - 1],
-      "The last token of the Pancakeswap route must be the to token"
+      targetToken == _pancakeswapRoute[_pancakeswapRoute.length - 1],
+      "The last token of the Pancakeswap route must be the reward token"
     );
 
-    pancakeswapRoutes[from][to] = _pancakeswapRoute;
+    pancakeswapRoutes[from] = _pancakeswapRoute;
   }
 
   // Transfers the funds from the msg.sender to the pool
   // under normal circumstances, msg.sender is the strategy
   function poolNotifyFixedTarget(address _token, uint256 _amount) external {
     uint256 remainingAmount = _amount;
-    // Note: targetToken could only be FARM or NULL.
+    address _targetToken = targetToken;
     // it is only used to check that the rewardPool is set.
-    if (targetToken == address(0)) {
+    if (_targetToken == address(0)) {
       return; // a No-op if target pool is not set yet
     }
 
-    if (_token == targetToken) {
+    if (_token == _targetToken) {
       // this is already the right token
       // Note: Under current structure, this would be FARM.
       // This would pass on the grain buy back as it would be the special case
@@ -93,15 +97,15 @@ contract FeeRewardForwarder is Governable {
     } else {
 
       // we need to convert _token to FARM
-      if (pancakeswapRoutes[_token][targetToken].length > 1) {
+      if (pancakeswapRoutes[_token].length > 1) {
         IBEP20(_token).safeTransferFrom(msg.sender, address(this), remainingAmount);
         uint256 balanceToSwap = IBEP20(_token).balanceOf(address(this));
-        liquidate(_token, targetToken, balanceToSwap);
+        liquidate(_token, balanceToSwap);
 
         // now we can send this token forward
-        uint256 convertedRewardAmount = IBEP20(targetToken).balanceOf(address(this));
+        uint256 convertedRewardAmount = IBEP20(_targetToken).balanceOf(address(this));
 
-        IBEP20(targetToken).safeTransfer(profitSharingPool, convertedRewardAmount);
+        IBEP20(_targetToken).safeTransfer(profitSharingPool, convertedRewardAmount);
         IRewardPool(profitSharingPool).notifyRewardAmount(convertedRewardAmount);
 
         // send the token to the cross-chain converter address
@@ -115,15 +119,16 @@ contract FeeRewardForwarder is Governable {
     }
   }
 
-  function liquidate(address _from, address _to, uint256 balanceToSwap) internal {
+  function liquidate(address _from, uint256 balanceToSwap) internal {
     if(balanceToSwap > 0){
-      IBEP20(_from).safeApprove(pancakeswapRouterV2, 0);
-      IBEP20(_from).safeApprove(pancakeswapRouterV2, balanceToSwap);
+      address router = pancakeswapRouterV2;
+      IBEP20(_from).safeApprove(router, 0);
+      IBEP20(_from).safeApprove(router, balanceToSwap);
 
-      IPancakeRouter02(pancakeswapRouterV2).swapExactTokensForTokens(
+      IPancakeRouter02(router).swapExactTokensForTokens(
         balanceToSwap,
         0,
-        pancakeswapRoutes[_from][_to],
+        pancakeswapRoutes[_from],
         address(this),
         block.timestamp
       );
