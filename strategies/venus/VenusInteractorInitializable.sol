@@ -18,7 +18,7 @@ contract VenusInteractorInitializable is Initializable, ReentrancyGuardUpgradeab
     using SafeBEP20 for IBEP20;
 
     IBEP20 public underlyingToken;
-    address payable public _wbnb;
+    address payable public wbnb; // 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c
     CompleteVToken public vtoken;
     ComptrollerInterface public comptroller;
 
@@ -27,14 +27,15 @@ contract VenusInteractorInitializable is Initializable, ReentrancyGuardUpgradeab
     function initialize(
         address _underlying,
         address _vtoken,
-        address _comptroller
+        address _comptroller,
+        address payable _wbnb
     ) public initializer {
         __ReentrancyGuard_init();
-        // Comptroller:
+
         comptroller = ComptrollerInterface(_comptroller);
 
         underlyingToken = IBEP20(_underlying);
-        _wbnb = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+        wbnb = _wbnb;
         vtoken = CompleteVToken(_vtoken);
 
         // Enter the market
@@ -57,7 +58,7 @@ contract VenusInteractorInitializable is Initializable, ReentrancyGuardUpgradeab
         if (amountInWBNB < balance) {
             balance = amountInWBNB; // only supply the "amount" if its less than what we have
         }
-        WBNB wbnb = WBNB(payable(address(_wbnb)));
+        WBNB wbnb = WBNB(payable(address(wbnb)));
         wbnb.withdraw(balance); // Unwrapping
         IVBNB(address(vtoken)).mint.value(balance)();
     }
@@ -68,7 +69,7 @@ contract VenusInteractorInitializable is Initializable, ReentrancyGuardUpgradeab
      */
     function _redeemBNBInvTokens(uint256 amountVTokens) internal nonReentrant {
         _redeemInVTokens(amountVTokens);
-        WBNB wbnb = WBNB(payable(address(_wbnb)));
+        WBNB wbnb = WBNB(payable(address(wbnb)));
         wbnb.deposit.value(address(this).balance)();
     }
 
@@ -103,7 +104,7 @@ contract VenusInteractorInitializable is Initializable, ReentrancyGuardUpgradeab
         // Borrow BNB, wraps into WBNB
         uint256 result = vtoken.borrow(amountUnderlying);
         require(result == 0, "Borrow failed");
-        WBNB wbnb = WBNB(payable(address(_wbnb)));
+        WBNB wbnb = WBNB(payable(address(wbnb)));
         wbnb.deposit.value(address(this).balance)();
     }
 
@@ -121,7 +122,7 @@ contract VenusInteractorInitializable is Initializable, ReentrancyGuardUpgradeab
      * Repays a loan in BNB
      */
     function _repayInWBNB(uint256 amountUnderlying) internal {
-        WBNB wbnb = WBNB(payable(address(_wbnb)));
+        WBNB wbnb = WBNB(payable(address(wbnb)));
         wbnb.withdraw(amountUnderlying); // Unwrapping
         IVBNB(address(vtoken)).repayBorrow.value(amountUnderlying)();
     }
@@ -150,7 +151,7 @@ contract VenusInteractorInitializable is Initializable, ReentrancyGuardUpgradeab
     function redeemUnderlyingInWBNB(uint256 amountUnderlying) internal {
         if (amountUnderlying > 0) {
             _redeemUnderlying(amountUnderlying);
-            WBNB wbnb = WBNB(payable(address(_wbnb)));
+            WBNB wbnb = WBNB(payable(address(wbnb)));
             wbnb.deposit.value(address(this).balance)();
         }
     }

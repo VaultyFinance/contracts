@@ -49,6 +49,7 @@ contract VenusWBNBFoldStrategy is BaseUpgradeableStrategy, VenusInteractorInitia
     address _comptroller,
     address _xvs,
     address _pancakeswap,
+    address payable _wbnb,
     uint256 _collateralFactorNumerator,
     uint256 _collateralFactorDenominator,
     uint256 _folds
@@ -67,7 +68,7 @@ contract VenusWBNBFoldStrategy is BaseUpgradeableStrategy, VenusInteractorInitia
       12 hours // implementation change delay
     );
 
-    VenusInteractorInitializable.initialize(_underlying, _vtoken, _comptroller);
+    VenusInteractorInitializable.initialize(_underlying, _vtoken, _comptroller, _wbnb);
 
     require(IVault(_vault).underlying() == _underlying, "vault does not support underlying");
     comptroller = ComptrollerInterface(_comptroller);
