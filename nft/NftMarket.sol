@@ -91,48 +91,6 @@ contract NftMarket is ControllableInit, BaseProxyStorage, IUpgradeSource {
 
         emit SetAdded(setId, kind, price);
     }
-    
-    // redeem nft of choice from set
-    function redeemFor(address user, uint256 setId, uint256 nftIndex, uint256 nftId) public {
-        Set storage set = sets[setId];
-        require(set.kind == SetKind.Redeemable, "kind incorrect");
-
-        uint256 totalItems = set.items.length;
-        require(totalItems > nftIndex, "index incorrect");
-
-        uint256 price = set.price;
-        require(
-            lantti.balanceOf(msg.sender) >= price,
-            "not enough LANTTI to redeem nft"
-        );
-
-        SetItem memory item = set.items[nftIndex];
-        require(item.amountLeft > 0, "not enough items"); // should never revert here!
-        require(item.nftId == nftId, "wrong nft"); // in case if previous tx removed NFT from the set
-
-        require(
-            nft.totalSupply(nftId).add(1) <= nft.maxSupply(nftId),
-            "max nfts minted"
-        );
-
-        if (item.amountLeft == 0) {
-            // delete item
-            set.items[nftIndex] = set.items[totalItems - 1];
-            set.items.pop();
-        } else {
-            set.items[nftIndex].amountLeft = item.amountLeft;
-        }
-
-        lantti.burn(msg.sender, price);
-
-        if (nft.isNonFungible(nftId)) {
-            nftId = nft.mintNft(user, nftId, "");
-        } else {
-            nft.mintFt(user, nftId, 1, "");
-        }
-        
-        emit NftRedeemed(user, setId, nftId, price);
-    }
 
     // Mint 1 random nft from set
     function openSetFor(address user, uint256 setId) public {

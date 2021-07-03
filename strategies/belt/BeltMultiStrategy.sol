@@ -40,7 +40,7 @@ contract BeltMultiStrategy is BaseUpgradeableStrategy {
         address _rewardToken,
         address _depositHelp,
         uint256 _poolID
-    ) public initializer {
+    ) internal initializer {
         BaseUpgradeableStrategy.initialize(
             _storage,
             _underlying,

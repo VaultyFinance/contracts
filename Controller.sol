@@ -1,5 +1,3 @@
-
-
 pragma solidity 0.6.12;
 
 import "@pancakeswap/pancake-swap-lib/contracts/utils/Address.sol";
@@ -13,7 +11,6 @@ import "./FeeRewardForwarder.sol";
 import "./Governable.sol";
 
 contract Controller is IController, Governable {
-
     using SafeBEP20 for IBEP20;
     using Address for address;
     using SafeMath for uint256;
@@ -30,53 +27,54 @@ contract Controller is IController, Governable {
     // even if an EOA is being added to the greyList, he/she will still be able
     // to interact with the whole system as if nothing happened.
     // Only smart contracts will be affected by being added to the greyList.
-    mapping (address => bool) public override greyList;
+    mapping(address => bool) public override greyList;
 
     // All vaults that we have
-    mapping (address => bool) public vaults;
+    mapping(address => bool) public vaults;
 
-    uint256 public constant override profitSharingNumerator = 20;
+    uint256 public constant override profitSharingNumerator = 10;
     uint256 public constant override profitSharingDenominator = 100;
 
     event SharePriceChangeLog(
-      address indexed vault,
-      address indexed strategy,
-      uint256 oldSharePrice,
-      uint256 newSharePrice,
-      uint256 timestamp
+        address indexed vault,
+        address indexed strategy,
+        uint256 oldSharePrice,
+        uint256 newSharePrice,
+        uint256 timestamp
     );
 
-    modifier validVault(address _vault){
+    modifier validVault(address _vault) {
         require(vaults[_vault], "vault does not exist");
         _;
     }
 
-    mapping (address => bool) public hardWorkers;
+    mapping(address => bool) public hardWorkers;
 
     modifier onlyHardWorkerOrGovernance() {
-        require(hardWorkers[msg.sender] || (msg.sender == governance()),
-        "only hard worker can call this");
+        require(
+            hardWorkers[msg.sender] || (msg.sender == governance()),
+            "only hard worker can call this"
+        );
         _;
     }
 
-    constructor(address _storage, address _feeRewardForwarder)
-    Governable(_storage) public {
+    constructor(address _storage, address _feeRewardForwarder) public Governable(_storage) {
         require(_feeRewardForwarder != address(0), "feeRewardForwarder should not be empty");
         feeRewardForwarder = _feeRewardForwarder;
     }
 
     function addHardWorker(address _worker) public onlyGovernance {
-      require(_worker != address(0), "_worker must be defined");
-      hardWorkers[_worker] = true;
+        require(_worker != address(0), "_worker must be defined");
+        hardWorkers[_worker] = true;
     }
 
     function removeHardWorker(address _worker) public onlyGovernance {
-      require(_worker != address(0), "_worker must be defined");
-      hardWorkers[_worker] = false;
+        require(_worker != address(0), "_worker must be defined");
+        hardWorkers[_worker] = false;
     }
 
     function hasVault(address _vault) external override returns (bool) {
-      return vaults[_vault];
+        return vaults[_vault];
     }
 
     // Only smart contracts will be affected by the greyList.
@@ -89,11 +87,15 @@ contract Controller is IController, Governable {
     }
 
     function setFeeRewardForwarder(address _feeRewardForwarder) public override onlyGovernance {
-      require(_feeRewardForwarder != address(0), "new reward forwarder should not be empty");
-      feeRewardForwarder = _feeRewardForwarder;
+        require(_feeRewardForwarder != address(0), "new reward forwarder should not be empty");
+        feeRewardForwarder = _feeRewardForwarder;
     }
 
-    function addVaultAndStrategy(address _vault, address _strategy) external override onlyGovernance {
+    function addVaultAndStrategy(address _vault, address _strategy)
+        external
+        override
+        onlyGovernance
+    {
         require(_vault != address(0), "new vault shouldn't be empty");
         require(!vaults[_vault], "vault already exists");
         require(_strategy != address(0), "new strategy shouldn't be empty");
@@ -103,15 +105,20 @@ contract Controller is IController, Governable {
         IVault(_vault).setStrategy(_strategy);
     }
 
-    function doHardWork(address _vault) external override onlyHardWorkerOrGovernance validVault(_vault) {
+    function doHardWork(address _vault)
+        external
+        override
+        onlyHardWorkerOrGovernance
+        validVault(_vault)
+    {
         uint256 oldSharePrice = IVault(_vault).getPricePerFullShare();
         IVault(_vault).doHardWork();
         emit SharePriceChangeLog(
-          _vault,
-          IVault(_vault).strategy(),
-          oldSharePrice,
-          IVault(_vault).getPricePerFullShare(),
-          block.timestamp
+            _vault,
+            IVault(_vault).strategy(),
+            oldSharePrice,
+            IVault(_vault).getPricePerFullShare(),
+            block.timestamp
         );
     }
 
@@ -120,7 +127,11 @@ contract Controller is IController, Governable {
         IBEP20(_token).safeTransfer(governance(), _amount);
     }
 
-    function salvageStrategy(address _strategy, address _token, uint256 _amount) external override onlyGovernance {
+    function salvageStrategy(
+        address _strategy,
+        address _token,
+        uint256 _amount
+    ) external override onlyGovernance {
         // the strategy is responsible for maintaining the list of
         // salvagable tokens, to make sure that governance cannot come
         // in and take away the coins
@@ -128,11 +139,12 @@ contract Controller is IController, Governable {
     }
 
     function notifyFee(address underlying, uint256 fee) external override {
-      if (fee > 0) {
-        IBEP20(underlying).safeTransferFrom(msg.sender, address(this), fee);
-        IBEP20(underlying).safeApprove(feeRewardForwarder, 0);
-        IBEP20(underlying).safeApprove(feeRewardForwarder, fee);
-        FeeRewardForwarder(feeRewardForwarder).poolNotifyFixedTarget(underlying, fee);
-      }
+        if (fee > 0) {
+            IBEP20(underlying).safeTransferFrom(msg.sender, address(this), fee);
+            IBEP20(underlying).safeApprove(feeRewardForwarder, 0);
+            IBEP20(underlying).safeApprove(feeRewardForwarder, fee);
+            FeeRewardForwarder(feeRewardForwarder).poolNotifyFixedTarget(underlying, fee);
+        }
     }
+
 }

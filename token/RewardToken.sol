@@ -1,16 +1,14 @@
 pragma solidity 0.6.12;
 
 import "./BEP20.sol";
-import "../Governable.sol";
 import "../lib/MinterRole.sol";
 
-contract RewardToken is MinterRole, BEP20, Governable {
-    uint256 public constant HARD_CAP = 1500000 * (10**18);
+contract RewardToken is MinterRole, BEP20 {
+    uint256 public constant HARD_CAP = 15000000 * (10**18);
 
-    constructor(address _storage) public BEP20("Holvi Reward Token", "HOLVI") Governable(_storage) {
+    constructor(address gov) public BEP20("Vaulty Token", "VLTY") {
         renounceOwnership();
 
-        address gov = governance();
         if (!isMinter(gov)) {
             _addMinter(gov);
         }

@@ -4,7 +4,7 @@ pragma solidity 0.6.12;
 
 import "./BeltSingleStrategy.sol";
 
-contract BeltSingleStrategy_BTCB is BeltSingleStrategy {
+contract BeltSingleStrategy_BeltBNB is BeltSingleStrategy {
 
   constructor() public {}
 
@@ -14,19 +14,18 @@ contract BeltSingleStrategy_BTCB is BeltSingleStrategy {
   ) public initializer {
     address belt = address(0xE0e514c71282b6f4e823703a39374Cf58dc3eA4f);
     address wbnb = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
-    address beltBTC = address(0x51bd63F240fB13870550423D208452cA87c44444);
-    address btcb = address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c);
+    address beltBNB = address(0xa8Bb71facdd46445644C277F9499Dd22f6F0A30C);
     address masterBelt = address(0xD4BbC80b9B102b77B21A06cb77E954049605E6c1);
     BeltSingleStrategy.initialize(
       _storage,
-      beltBTC,
+      beltBNB,
       _vault,
       masterBelt, // stakingPool
       belt,
-      beltBTC,
-      btcb,
-      7  // Pool id
+      beltBNB,
+      wbnb,
+      9  // Pool id
     );
-    pancake_route = [belt, wbnb, btcb];
+    pancake_route = [belt, wbnb];
   }
 }

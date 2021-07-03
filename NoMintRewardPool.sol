@@ -109,6 +109,8 @@ contract NoMintRewardPool is LPTokenWrapper, RewardDistributionRecipient, Contro
         rewardToken = IBEP20(_rewardToken);
         lpToken = IBEP20(_lpToken);
         duration = _duration;
+        setWithdrawalDelay(3 days);
+        setWithdrawalFee(50); // 0.5% 
     }
 
     function setWithdrawalDelay(uint256 delay) public override onlyGovernance {
@@ -140,7 +142,8 @@ contract NoMintRewardPool is LPTokenWrapper, RewardDistributionRecipient, Contro
     function earned(address account) public view returns (uint256) {
         return
             balanceOf(account)
-                .mul(rewardPerToken().sub(userRewardPerTokenPaid[account]))
+                .mul(rewardPerToken()
+                .sub(userRewardPerTokenPaid[account]))
                 .div(REWARD_PRECISION)
                 .add(rewards[account]);
     }

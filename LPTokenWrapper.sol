@@ -18,6 +18,9 @@ contract LPTokenWrapper {
     uint256 private _totalSupply;
     mapping(address => uint256) private _balances;
 
+    event WithdrawalFeeChanged(uint256 amount);
+    event WithdrawalDelayChanged(uint256 delay);
+
     function totalSupply() public view returns (uint256) {
         return _totalSupply;
     }
@@ -28,11 +31,13 @@ contract LPTokenWrapper {
 
     function setWithdrawalDelay(uint256 delay) public virtual {
         withdrawDelay = delay;
+        emit WithdrawalDelayChanged(delay);
     }
 
     function setWithdrawalFee(uint256 fee) public virtual {
         require(fee <= FEE_PRECISION);
         withdrawFee = fee;
+        emit WithdrawalFeeChanged(fee);
     }
 
     function stakeTokens(uint256 amount) internal {

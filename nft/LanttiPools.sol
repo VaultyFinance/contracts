@@ -1,6 +1,7 @@
 pragma solidity 0.6.12;
 
 import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/IBEP20.sol";
+import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/SafeBEP20.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/math/SafeMath.sol";
 import "../Governable.sol";
 import "../token/Lantti.sol";
@@ -11,6 +12,7 @@ import "../upgradability/BaseProxyStorage.sol";
 
 contract LanttiPools is ControllableInit, BaseProxyStorage, IUpgradeSource {
     using SafeMath for uint256;
+    using SafeBEP20 for IBEP20;
 
     uint256 public constant BONUS_PRECISION = 10**5;
     uint256 public constant REWARD_PRECISION = 10**12;
@@ -188,7 +190,7 @@ contract LanttiPools is ControllableInit, BaseProxyStorage, IUpgradeSource {
             lantti.mint(msg.sender, pendingWithBooster);
         }
 
-        pool.token.transferFrom(address(msg.sender), address(this), _amount);
+        pool.token.safeTransferFrom(address(msg.sender), address(this), _amount);
         emit Deposit(msg.sender, _pid, _amount);
     }
 
@@ -233,7 +235,7 @@ contract LanttiPools is ControllableInit, BaseProxyStorage, IUpgradeSource {
             lantti.mint(staker, pendingWithBooster);
         }
 
-        pool.token.transfer(address(staker), _amount);
+        pool.token.safeTransfer(address(staker), _amount);
         emit Withdraw(staker, _pid, _amount);
     }
 
@@ -247,7 +249,7 @@ contract LanttiPools is ControllableInit, BaseProxyStorage, IUpgradeSource {
         uint256 _amount = user.amount;
         user.amount = 0;
         user.rewardDebt = 0;
-        pool.token.transfer(address(msg.sender), _amount);
+        pool.token.safeTransfer(address(msg.sender), _amount);
 
         emit EmergencyWithdraw(msg.sender, _pid, _amount);
     }
