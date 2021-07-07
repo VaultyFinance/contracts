@@ -143,10 +143,12 @@ contract FeeRewardForwarder is Governable {
     }
 
     function liquidateToBNB(address _from, uint256 balanceToSwap) internal {
-        address[] memory route;
+        address[] memory route = new address[](2);
         route[0] = _from;
         route[1] = wbnb;
+        
         if (balanceToSwap > 0) {
+            IBEP20(_from).safeTransferFrom(msg.sender, address(this), balanceToSwap);
             address router = pancakeswapRouterV2;
             IBEP20(_from).safeApprove(router, 0);
             IBEP20(_from).safeApprove(router, balanceToSwap);

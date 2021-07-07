@@ -44,6 +44,8 @@ contract PancakeMasterChefLPStrategy is BaseUpgradeableStrategy {
         uint256 _poolID,
         bool _isLpToken
     ) public initializer {
+        require(_storage != address(0), "address cannot be zero");
+        require(_rewardPool != address(0), "address cannot be zero");
         BaseUpgradeableStrategy.initialize(
             _storage,
             _underlying,
