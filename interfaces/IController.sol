@@ -24,6 +24,6 @@ interface IController {
     function profitSharingNumerator() external view returns (uint256);
     function profitSharingDenominator() external view returns (uint256);
 
-    function feeRewardForwarder() external view returns(address);
-    function setFeeRewardForwarder(address _value) external;
+    function feeRewardForwarder() external view returns(address payable);
+    function setFeeRewardForwarder(address payable _value) external;
 }

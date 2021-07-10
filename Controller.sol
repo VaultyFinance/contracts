@@ -16,7 +16,7 @@ contract Controller is IController, Governable {
     using SafeMath for uint256;
 
     // external parties
-    address public override feeRewardForwarder;
+    address payable public override feeRewardForwarder;
 
     // [Grey list]
     // An EOA can safely interact with the system no matter what.
@@ -58,7 +58,7 @@ contract Controller is IController, Governable {
         _;
     }
 
-    constructor(address _storage, address _feeRewardForwarder) public Governable(_storage) {
+    constructor(address _storage, address payable _feeRewardForwarder) public Governable(_storage) {
         require(_feeRewardForwarder != address(0), "feeRewardForwarder should not be empty");
         feeRewardForwarder = _feeRewardForwarder;
     }
@@ -86,7 +86,7 @@ contract Controller is IController, Governable {
         greyList[_target] = false;
     }
 
-    function setFeeRewardForwarder(address _feeRewardForwarder) public override onlyGovernance {
+    function setFeeRewardForwarder(address payable _feeRewardForwarder) public override onlyGovernance {
         require(_feeRewardForwarder != address(0), "new reward forwarder should not be empty");
         feeRewardForwarder = _feeRewardForwarder;
     }

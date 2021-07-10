@@ -5,6 +5,7 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
 import "./BaseUpgradeableStrategyStorage.sol";
 import "../ControllableInit.sol";
+import "hardhat/console.sol";
 import "../interfaces/IController.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/IBEP20.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/math/SafeMath.sol";
@@ -88,7 +89,9 @@ contract BaseUpgradeableStrategy is Initializable, ControllableInit, BaseUpgrade
 
   function notifyProfitInRewardToken(uint256 _rewardBalance) internal {
     if( _rewardBalance > 0 ){
+      console.log(_rewardBalance, "_rewardBalance");
       uint256 feeAmount = _rewardBalance.mul(profitSharingNumerator()).div(profitSharingDenominator());
+      console.log(feeAmount, "feeAmount");
       emit ProfitLogInReward(_rewardBalance, feeAmount, block.timestamp);
       IBEP20(rewardToken()).safeApprove(controller(), 0);
       IBEP20(rewardToken()).safeApprove(controller(), feeAmount);

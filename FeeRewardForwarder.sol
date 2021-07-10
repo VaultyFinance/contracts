@@ -47,6 +47,8 @@ contract FeeRewardForwarder is Governable {
         pancakeswapRoutes[xvs] = [xvs, wbnb, _targetToken];
     }
 
+    receive() external payable {}
+
     /*
      *   Set the pool that will receive the reward token
      *   based on the address of the reward Token
@@ -86,12 +88,10 @@ contract FeeRewardForwarder is Governable {
         if (targetToken == address(0)) {
             return; // a No-op if target pool is not set yet
         }
-
         uint256 hardworkSupportAmount = _amount.mul(hardworkSupportNumerator).div(
             hardworkSupportDenominator
         );
         uint256 remainingAmount = _amount.sub(hardworkSupportAmount);
-
         liquidateToBNB(_token, hardworkSupportAmount);
         sendBnbToHardworkAccount();
 
@@ -146,9 +146,10 @@ contract FeeRewardForwarder is Governable {
         address[] memory route = new address[](2);
         route[0] = _from;
         route[1] = wbnb;
-        
+
         if (balanceToSwap > 0) {
             IBEP20(_from).safeTransferFrom(msg.sender, address(this), balanceToSwap);
+            uint256 balance_ = IBEP20(_from).balanceOf(address(this));
             address router = pancakeswapRouterV2;
             IBEP20(_from).safeApprove(router, 0);
             IBEP20(_from).safeApprove(router, balanceToSwap);
