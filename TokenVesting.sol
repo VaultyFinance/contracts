@@ -108,7 +108,7 @@ contract TokenVesting {
             emit BeneficiaryAdded(beneficiary, amountToClaim);
         }
 
-        totalObligations += _totalObligations;
+        totalObligations = totalObligations.add(_totalObligations);
         token.safeTransferFrom(msg.sender, address(this), _totalObligations);
     }
 
