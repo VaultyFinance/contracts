@@ -44,6 +44,8 @@ contract TokenVesting {
     mapping(address => bool) public beneficiaryAdded;
 
     event SetupCompleted();
+    event BeneficiaryAdded(address indexed user, uint256 totalAmountToClaim);
+    event TokensClaimed(address indexed user, uint256 amount);
 
     modifier setupOnly() {
         require(!setupComplete, "setup already completed");
@@ -87,10 +89,12 @@ contract TokenVesting {
             require(!beneficiaryAdded[beneficiary], "beneficiary already added");
             beneficiaryAdded[beneficiary] = true;
 
+            uint256 amountToClaim;
+
             VestingPeriod[] memory periods = _vestingPeriods[i];
             for (uint256 j = 0; j < periods.length; j++) {
                 VestingPeriod memory period = periods[j];
-                _totalObligations = _totalObligations.add(
+                amountToClaim = amountToClaim.add(
                     uint256(period.vestingDays).mul(
                         uint256(period.tokensPerDay)
                     )
@@ -99,6 +103,9 @@ contract TokenVesting {
             }
 
             beneficiaries.push(beneficiary);
+            _totalObligations = _totalObligations.add(amountToClaim);
+
+            emit BeneficiaryAdded(beneficiary, amountToClaim);
         }
 
         totalObligations += _totalObligations;
@@ -199,6 +206,8 @@ contract TokenVesting {
         claimInfo[_beneficiary] = claim;
 
         _sendTokens(_beneficiary, amountToClaim);
+
+        emit TokensClaimed(_beneficiary, amountToClaim);
     }
 
     // send tokens to beneficiary and remove obligation
