@@ -121,9 +121,14 @@ contract TokenVesting {
         @dev This function returns tokensAmount available to claim. Calculates it based on several vesting periods if applicable.
      */
     function _tokensToClaim(address _beneficiary, VestingClaimInfo memory claim) private view returns(uint256 tokensAmount, uint256 daysClaimed) {
-        uint256 daysElapsed = (block.timestamp - claim.lastClaim) / 1 days;
+        uint256 lastClaim = claim.lastClaim;
+        if (lastClaim == 0) { // first time claim, set it to a contract start time
+            lastClaim = startTime;
+        }
 
-        if (claim.lastClaim == 0)  {
+        uint256 daysElapsed = (block.timestamp - lastClaim) / 1 days;
+
+        if (claim.lastClaim == 0)  { // first time claim
             // check for lock period
             if (daysElapsed > lockingPeriod) {
                 // passed beyond locking period, adjust elapsed days by locking period
