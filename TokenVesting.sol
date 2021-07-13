@@ -64,7 +64,6 @@ contract TokenVesting {
 
     constructor(
         IERC20Upgradeable _token,
-        address _owner,
         uint256 _startTime,
         uint256 _lockingPeriod
     ) public {
@@ -108,7 +107,7 @@ contract TokenVesting {
             emit BeneficiaryAdded(beneficiary, amountToClaim);
         }
 
-        totalObligations = totalObligations.add(_totalObligations);
+        totalObligations += _totalObligations;
         token.safeTransferFrom(msg.sender, address(this), _totalObligations);
     }
 
@@ -143,7 +142,7 @@ contract TokenVesting {
         uint256 totalPeriods = vestingPeriods[_beneficiary].length;
 
         // it's safe to assume that admin won't setup contract in such way, that this loop will be out of gas
-        while (daysElapsed > 0 && totalPeriods < periodIndex) {
+        while (daysElapsed > 0 && totalPeriods > periodIndex) {
             VestingPeriod memory vestingPeriod = vestingPeriods[_beneficiary][periodIndex];
 
             uint256 daysInPeriodToClaim = vestingPeriod.vestingDays - claim.daysClaimed;
