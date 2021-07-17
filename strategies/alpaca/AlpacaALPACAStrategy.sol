@@ -18,11 +18,11 @@ contract AlpacaALPACAStrategy is AlpacaBaseStrategy {
     address ibToken = address(0xf1bE8ecC990cBcb90e166b71E368299f0116d421); // underlying and depositor help contract at once
     AlpacaBaseStrategy.initialize(
       _storage,
-      ibToken,
+      underlying,
       _vault,
       ibToken,
-      underlying,
-      3
+      ibToken,
+      11
     );
     pancake_route = [alpaca, wbnb, underlying];
   }

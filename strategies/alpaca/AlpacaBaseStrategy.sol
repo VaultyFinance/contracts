@@ -43,17 +43,17 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
 
     function initialize(
         address _storage,
-        address _underlying, // ibToken which is staked
+        address _underlying, // main underlying like BNB, ETH, USDT
         address _vault,
         address _depositHelp, // lend contract where to put BNB, ETH, USDT
-        address _depositorUnderlying, // main underlying like BNB, ETH, USDT
+        address _depositorUnderlying, // ibToken which should be staked to get rewards (usually the same as _depositorHelp)
         uint256 _poolID
     ) public initializer {
         BaseUpgradeableStrategy.initialize(
             _storage,
             _underlying,
             _vault,
-            address(0xA625AB01B08ce023B2a342Dbb12a16f2C8489A8F), // _rewardPool ALPACA FairLaunch contract
+            address(0xA625AB01B08ce023B2a342Dbb12a16f2C8489A8F), // _rewardPool ALPACA FairLaunch contract (staking contract)
             address(0x8F0528cE5eF7B51152A59745bEfDD91D97091d2F), // _rewardToken ALPACA token
             90, // profit sharing numerator
             1000, // profit sharing denominator
@@ -63,8 +63,8 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
         );
 
         address _lpt;
-        (_lpt,,,) = IFairLaunch(rewardPool()).poolInfo(_poolID);
-        require(_lpt == underlying(), "Pool Info does not match underlying");
+        (_lpt, , , ) = IFairLaunch(rewardPool()).poolInfo(_poolID);
+        require(_lpt == _depositorUnderlying, "Pool Info does not match underlying");
         _setPoolId(_poolID);
         _setDepositor(_depositHelp);
         _setDepositorUnderlying(_depositorUnderlying);
@@ -75,19 +75,11 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
     }
 
     function rewardPoolBalance() internal view returns (uint256 bal) {
-        (bal,,,) = IFairLaunch(rewardPool()).userInfo(poolId(), address(this));
+        (bal, , , ) = IFairLaunch(rewardPool()).userInfo(poolId(), address(this));
     }
 
     function unsalvagableTokens(address token) public view returns (bool) {
         return (token == rewardToken() || token == underlying());
-    }
-
-    function stake() internal {
-        uint256 entireBalance = IBEP20(underlying()).balanceOf(address(this));
-        IBEP20(underlying()).safeApprove(rewardPool(), 0);
-        IBEP20(underlying()).safeApprove(rewardPool(), entireBalance);
-
-        IFairLaunch(rewardPool()).deposit(address(this), poolId(), entireBalance);
     }
 
     /*
@@ -114,59 +106,65 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
 
     // We assume that all the tradings can be done on Pancakeswap
     function _liquidateReward() internal {
-        uint256 rewardBalance = IBEP20(rewardToken()).balanceOf(address(this));
-        if (!sell() || rewardBalance < sellFloor()) {
-            // Profits can be disabled for possible simplified and rapid exit
-            emit ProfitsNotCollected(sell(), rewardBalance < sellFloor());
-            return;
+        if (underlying() != rewardToken()) {
+            uint256 rewardBalance = IBEP20(rewardToken()).balanceOf(address(this));
+            if (!sell() || rewardBalance < sellFloor()) {
+                // Profits can be disabled for possible simplified and rapid exit
+                emit ProfitsNotCollected(sell(), rewardBalance < sellFloor());
+                return;
+            }
+            notifyProfitInRewardToken(rewardBalance);
+            uint256 remainingRewardBalance = IBEP20(rewardToken()).balanceOf(address(this));
+            if (remainingRewardBalance == 0) {
+                return;
+            }
+
+            // allow Pancakeswap to sell our reward
+            IBEP20(rewardToken()).safeApprove(pancakeswapRouterV2, 0);
+            IBEP20(rewardToken()).safeApprove(pancakeswapRouterV2, remainingRewardBalance);
+
+            // we can accept 1 as minimum because this is called only by a trusted role
+            uint256 amountOutMin = 1;
+
+            IPancakeRouter02(pancakeswapRouterV2).swapExactTokensForTokens(
+                remainingRewardBalance,
+                amountOutMin,
+                pancake_route,
+                address(this),
+                block.timestamp
+            );
         }
-        notifyProfitInRewardToken(rewardBalance);
-        uint256 remainingRewardBalance = IBEP20(rewardToken()).balanceOf(address(this));
-        if (remainingRewardBalance == 0) {
-            return;
-        }
-
-        // allow Pancakeswap to sell our reward
-        IBEP20(rewardToken()).safeApprove(pancakeswapRouterV2, 0);
-        IBEP20(rewardToken()).safeApprove(pancakeswapRouterV2, remainingRewardBalance);
-
-        // we can accept 1 as minimum because this is called only by a trusted role
-        uint256 amountOutMin = 1;
-
-        IPancakeRouter02(pancakeswapRouterV2).swapExactTokensForTokens(
-            remainingRewardBalance,
-            amountOutMin,
-            pancake_route,
-            address(this),
-            block.timestamp
-        );
     }
 
     function claimAndLiquidateReward() internal {
         IFairLaunch(rewardPool()).harvest(poolId());
         _liquidateReward();
-        if (IBEP20(depositorUnderlying()).balanceOf(address(this)) > 0) {
-            getUnderlyingFromDepositor();
-        }
     }
 
     function getUnderlyingFromDepositor() internal {
-        uint256 depositorUnderlyingBalance = IBEP20(depositorUnderlying()).balanceOf(address(this));
-        if (depositorUnderlyingBalance > 0) {
-            IBEP20(depositorUnderlying()).safeApprove(depositor(), 0);
-            IBEP20(depositorUnderlying()).safeApprove(depositor(), depositorUnderlyingBalance);
-            IVault(depositor()).deposit(depositorUnderlyingBalance);
+        uint256 ibBalance = IBEP20(depositorUnderlying()).balanceOf(address(this));
+        if (ibBalance > 0) {
+            IVault(depositor()).withdraw(ibBalance);
         }
     }
 
     /*
-     *   Stakes everything the strategy holds into the reward pool
+     *   Lend everything the strategy holds and then stake into the reward pool
      */
     function investAllUnderlying() internal onlyNotPausedInvesting {
-        // this check is needed, because most of the SNX reward pools will revert if
-        // you try to stake(0).
-        if (IBEP20(underlying()).balanceOf(address(this)) > 0) {
-            stake();
+        uint256 underlyingBalance = IBEP20(underlying()).balanceOf(address(this));
+        if (underlyingBalance > 0) {
+            IBEP20(underlying()).safeApprove(depositor(), 0);
+            IBEP20(underlying()).safeApprove(depositor(), underlyingBalance);
+            IVault(depositor()).deposit(underlyingBalance);
+        }
+
+        uint256 ibTokenBalance = IBEP20(depositorUnderlying()).balanceOf(address(this));
+
+        if (ibTokenBalance > 0) {
+            IBEP20(depositorUnderlying()).safeApprove(rewardPool(), 0);
+            IBEP20(depositorUnderlying()).safeApprove(rewardPool(), ibTokenBalance);
+            IFairLaunch(rewardPool()).deposit(address(this), poolId(), ibTokenBalance);
         }
     }
 
@@ -181,6 +179,7 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
                 IFairLaunch(rewardPool()).withdraw(address(this), poolId(), bal);
             }
         }
+        getUnderlyingFromDepositor();
         IBEP20(underlying()).safeTransfer(vault(), IBEP20(underlying()).balanceOf(address(this)));
     }
 
@@ -198,8 +197,8 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
             uint256 needToWithdraw = amount.sub(entireBalance);
             uint256 toWithdraw = MathUpgradeable.min(rewardPoolBalance(), needToWithdraw);
             IFairLaunch(rewardPool()).withdraw(msg.sender, poolId(), toWithdraw);
+            IVault(depositor()).withdraw(toWithdraw);
         }
-
         IBEP20(underlying()).safeTransfer(vault(), amount);
     }
 
