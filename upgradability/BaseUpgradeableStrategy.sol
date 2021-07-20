@@ -5,7 +5,6 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
 import "./BaseUpgradeableStrategyStorage.sol";
 import "../ControllableInit.sol";
-import "hardhat/console.sol";
 import "../interfaces/IController.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/IBEP20.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/math/SafeMath.sol";
@@ -15,6 +14,7 @@ contract BaseUpgradeableStrategy is Initializable, ControllableInit, BaseUpgrade
   using SafeMath for uint256;
   using SafeBEP20 for IBEP20;
 
+  uint256 constant MAX_PROFIT_SHARING_NUMERATOR = 10; // setted only once during deployment and can be modified
   event ProfitsNotCollected(bool sell, bool floor);
   event ProfitLogInReward(uint256 profitAmount, uint256 feeAmount, uint256 timestamp);
 
@@ -54,6 +54,7 @@ contract BaseUpgradeableStrategy is Initializable, ControllableInit, BaseUpgrade
     _setVault(_vault);
     _setRewardPool(_rewardPool);
     _setRewardToken(_rewardToken);
+    require(_profitSharingNumerator <= MAX_PROFIT_SHARING_NUMERATOR, "profit sharing numerator should be less or equal max value");
     _setProfitSharingNumerator(_profitSharingNumerator);
     _setProfitSharingDenominator(_profitSharingDenominator);
 
@@ -85,13 +86,16 @@ contract BaseUpgradeableStrategy is Initializable, ControllableInit, BaseUpgrade
     );
   }
 
+  function setProfitSharingNumerator(uint256 _profitSharingNumerator) public onlyGovernance {
+    require(_profitSharingNumerator <= MAX_PROFIT_SHARING_NUMERATOR, "profit sharing numerator should be less or equal max value");
+    _setProfitSharingNumerator(_profitSharingNumerator);
+  }
+
   // reward notification
 
   function notifyProfitInRewardToken(uint256 _rewardBalance) internal {
     if( _rewardBalance > 0 ){
-      console.log(_rewardBalance, "_rewardBalance");
       uint256 feeAmount = _rewardBalance.mul(profitSharingNumerator()).div(profitSharingDenominator());
-      console.log(feeAmount, "feeAmount");
       emit ProfitLogInReward(_rewardBalance, feeAmount, block.timestamp);
       IBEP20(rewardToken()).safeApprove(controller(), 0);
       IBEP20(rewardToken()).safeApprove(controller(), feeAmount);

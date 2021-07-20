@@ -107,7 +107,7 @@ contract TokenVesting {
             emit BeneficiaryAdded(beneficiary, amountToClaim);
         }
 
-        totalObligations += _totalObligations;
+        totalObligations = totalObligations.add(_totalObligations);
         token.safeTransferFrom(msg.sender, address(this), _totalObligations);
     }
 
@@ -125,13 +125,13 @@ contract TokenVesting {
             lastClaim = startTime;
         }
 
-        uint256 daysElapsed = (block.timestamp - lastClaim) / 1 days;
+        uint256 daysElapsed = (block.timestamp.sub(lastClaim)).div(1 days);
 
         if (claim.lastClaim == 0)  { // first time claim
             // check for lock period
             if (daysElapsed > lockingPeriod) {
                 // passed beyond locking period, adjust elapsed days by locking period
-                daysElapsed -= lockingPeriod;
+                daysElapsed = daysElapsed.sub(lockingPeriod);
             } else {
                 // tokens are locked
                 return (0, 0);
@@ -145,7 +145,7 @@ contract TokenVesting {
         while (daysElapsed > 0 && totalPeriods > periodIndex) {
             VestingPeriod memory vestingPeriod = vestingPeriods[_beneficiary][periodIndex];
 
-            uint256 daysInPeriodToClaim = vestingPeriod.vestingDays - claim.daysClaimed;
+            uint256 daysInPeriodToClaim = vestingPeriod.vestingDays.sub(claim.daysClaimed);
             if (daysInPeriodToClaim > daysElapsed) {
                 daysInPeriodToClaim = daysElapsed;
             }
@@ -154,8 +154,8 @@ contract TokenVesting {
                 uint256(vestingPeriod.tokensPerDay).mul(daysInPeriodToClaim)
             );
 
-            daysElapsed -= daysInPeriodToClaim;
-            daysClaimed += daysInPeriodToClaim;
+            daysElapsed = daysElapsed.sub(daysInPeriodToClaim);
+            daysClaimed = daysClaimed.add(daysInPeriodToClaim);
             // at this point, if any days left to claim, it means that period was consumed
             // move to the next period
             periodIndex++;
@@ -193,7 +193,7 @@ contract TokenVesting {
     // extra tokens after the end of vesting
     function reclaimTokens() external onlyAdmin setupOnly {
         uint256 tokenBalance = token.balanceOf(address(this));
-        token.transfer(setupAdmin, tokenBalance);
+        token.safeTransfer(setupAdmin, tokenBalance);
     }
 
     // Calculates the claimable tokens of a beneficiary and sends them.
@@ -205,7 +205,7 @@ contract TokenVesting {
             return;
         }
 
-        claim.daysClaimed += uint64(daysClaimed);
+        claim.daysClaimed = claim.daysClaimed.add(uint64(daysClaimed));
         claim.lastClaim = uint128(block.timestamp);
         claimInfo[_beneficiary] = claim;
 
@@ -216,7 +216,7 @@ contract TokenVesting {
 
     // send tokens to beneficiary and remove obligation
     function _sendTokens(address _beneficiary, uint256 _amountToSend) internal {
-        totalObligations -= _amountToSend;
-        token.transfer(_beneficiary, _amountToSend);
+        totalObligations = totalObligations.sub(_amountToSend);
+        token.safeTransfer(_beneficiary, _amountToSend);
     }
 }
