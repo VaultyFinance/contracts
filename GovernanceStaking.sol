@@ -24,8 +24,8 @@ contract GovernaceStaking is Governable {
 
   function depositTokens(uint256 amount) public onlyGovernance {
     depositTimestamp = block.timestamp;
-    token.safeTransferFrom(msg.sender, address(this), amount);
     tokensLocked += amount;
+    token.safeTransferFrom(msg.sender, address(this), amount);
   }
 
   function withdrawTokens() public onlyGovernance {
