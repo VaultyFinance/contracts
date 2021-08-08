@@ -17,6 +17,7 @@ contract Controller is IController, Governable {
 
     // external parties
     address payable public override feeRewardForwarder;
+    bool public feeForwarding;
 
     // [Grey list]
     // An EOA can safely interact with the system no matter what.
@@ -61,6 +62,15 @@ contract Controller is IController, Governable {
     constructor(address _storage, address payable _feeRewardForwarder) public Governable(_storage) {
         require(_feeRewardForwarder != address(0), "feeRewardForwarder should not be empty");
         feeRewardForwarder = _feeRewardForwarder;
+        enableForwarding();
+    }
+
+    function disableForwarding() public onlyGovernance {
+        feeForwarding = false;
+    }
+
+    function enableForwarding() public onlyGovernance {
+        feeForwarding = true;
     }
 
     function addHardWorker(address _worker) public onlyGovernance {
@@ -86,7 +96,11 @@ contract Controller is IController, Governable {
         greyList[_target] = false;
     }
 
-    function setFeeRewardForwarder(address payable _feeRewardForwarder) public override onlyGovernance {
+    function setFeeRewardForwarder(address payable _feeRewardForwarder)
+        public
+        override
+        onlyGovernance
+    {
         require(_feeRewardForwarder != address(0), "new reward forwarder should not be empty");
         feeRewardForwarder = _feeRewardForwarder;
     }
@@ -139,12 +153,11 @@ contract Controller is IController, Governable {
     }
 
     function notifyFee(address underlying, uint256 fee) external override {
-        if (fee > 0) {
+        if (fee > 0 && feeForwarding) {
             IBEP20(underlying).safeTransferFrom(msg.sender, address(this), fee);
             IBEP20(underlying).safeApprove(feeRewardForwarder, 0);
             IBEP20(underlying).safeApprove(feeRewardForwarder, fee);
-            FeeRewardForwarder(feeRewardForwarder).poolNotifyFixedTarget(underlying, fee);
+            FeeRewardForwarder(feeRewardForwarder).poolNotifyFixedTarget(underlying,fee);
         }
     }
-
 }

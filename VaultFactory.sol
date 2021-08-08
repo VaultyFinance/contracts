@@ -1,6 +1,5 @@
 pragma solidity 0.6.12;
 
-import "./VaultProxy.sol";
 import "./Vault.sol";
 import "./Controllable.sol";
 
@@ -17,13 +16,12 @@ contract VaultFactory is Controllable {
     uint256 _toInvestNumerator,
     uint256 _toInvestDenominator
   ) public onlyGovernance returns(address) {
-    VaultProxy proxy = new VaultProxy(_implementation);
-    Vault(address(proxy)).initializeVault(_storage,
+    Vault(_implementation).initializeVault(_storage,
       _underlying,
       _toInvestNumerator,
       _toInvestDenominator
     );
-    emit NewVault(address(proxy));
-    return address(proxy);
+    emit NewVault(_implementation);
+    return _implementation;
   }
 }

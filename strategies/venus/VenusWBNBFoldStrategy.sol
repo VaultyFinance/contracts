@@ -61,7 +61,7 @@ contract VenusWBNBFoldStrategy is BaseUpgradeableStrategy, VenusInteractorInitia
       _vault,
       _comptroller,
       _xvs,
-      250, // profit sharing numerator
+      100, // profit sharing numerator
       1000, // profit sharing denominator
       true, // sell
       1e16, // sell floor

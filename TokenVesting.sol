@@ -9,6 +9,8 @@ import "@openzeppelin/contracts-upgradeable/math/SafeMathUpgradeable.sol";
 contract TokenVesting {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using SafeMathUpgradeable for uint256;
+    using SafeMathUpgradeable for uint64;
+    using SafeMathUpgradeable for uint128;
 
     struct VestingPeriod {
         uint128 vestingDays;
@@ -145,7 +147,7 @@ contract TokenVesting {
         while (daysElapsed > 0 && totalPeriods > periodIndex) {
             VestingPeriod memory vestingPeriod = vestingPeriods[_beneficiary][periodIndex];
 
-            uint256 daysInPeriodToClaim = vestingPeriod.vestingDays.sub(claim.daysClaimed);
+            uint256 daysInPeriodToClaim = uint256(vestingPeriod.vestingDays).sub(claim.daysClaimed);
             if (daysInPeriodToClaim > daysElapsed) {
                 daysInPeriodToClaim = daysElapsed;
             }
@@ -205,7 +207,7 @@ contract TokenVesting {
             return;
         }
 
-        claim.daysClaimed = claim.daysClaimed.add(uint64(daysClaimed));
+        claim.daysClaimed = uint64(uint256(claim.daysClaimed).add(daysClaimed));
         claim.lastClaim = uint128(block.timestamp);
         claimInfo[_beneficiary] = claim;
 

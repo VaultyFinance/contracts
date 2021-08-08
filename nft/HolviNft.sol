@@ -5,8 +5,8 @@ import "../token/ERC1155.sol";
 contract HolviNft is ERC1155Mintable {
     string private _contractURI;
 
-    constructor(address _proxyRegistryAddress) public ERC1155Mintable("Holvi NFT", "HolviNFT", _proxyRegistryAddress) {
-        _setBaseMetadataURI("https://api.holvi.finance/nft/");
+    constructor(address _proxyRegistryAddress) public ERC1155Mintable("Vaulty NFT", "VaultyNFT", _proxyRegistryAddress) {
+        _setBaseMetadataURI("https://api.vaulty.finance/nft/");
     }
     
     /**

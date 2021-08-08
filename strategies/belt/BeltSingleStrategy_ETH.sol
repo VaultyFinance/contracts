@@ -4,7 +4,7 @@ pragma solidity 0.6.12;
 
 import "./BeltSingleStrategy.sol";
 
-contract BeltSingleStrategy_BeltETH is BeltSingleStrategy {
+contract BeltSingleStrategy_ETH is BeltSingleStrategy {
 
   constructor() public {}
 

@@ -110,7 +110,7 @@ contract NoMintRewardPool is LPTokenWrapper, RewardDistributionRecipient, Contro
         lpToken = IBEP20(_lpToken);
         duration = _duration;
         setWithdrawalDelay(3 days);
-        setWithdrawalFee(50); // 0.5% 
+        setWithdrawalFee(0);
     }
 
     function setWithdrawalDelay(uint256 delay) public override onlyGovernance {
@@ -119,6 +119,10 @@ contract NoMintRewardPool is LPTokenWrapper, RewardDistributionRecipient, Contro
 
     function setWithdrawalFee(uint256 fee) public override onlyGovernance {
         super.setWithdrawalFee(fee);
+    }
+
+    function setFeeCollector(address collector) public override onlyGovernance {
+        super.setFeeCollector(collector);
     }
 
     function lastTimeRewardApplicable() public view returns (uint256) {
@@ -157,7 +161,9 @@ contract NoMintRewardPool is LPTokenWrapper, RewardDistributionRecipient, Contro
     }
 
     function withdraw(uint256 amount) public updateReward(msg.sender) {
-        emit Withdrawn(msg.sender, withdrawTokens(amount));
+        uint256 amountAfterFee;
+        (amountAfterFee,) = withdrawTokens(amount);
+        emit Withdrawn(msg.sender, amountAfterFee);
     }
 
     function exit() external {

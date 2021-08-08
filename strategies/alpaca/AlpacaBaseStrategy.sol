@@ -55,7 +55,7 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
             _vault,
             address(0xA625AB01B08ce023B2a342Dbb12a16f2C8489A8F), // _rewardPool ALPACA FairLaunch contract (staking contract)
             address(0x8F0528cE5eF7B51152A59745bEfDD91D97091d2F), // _rewardToken ALPACA token
-            90, // profit sharing numerator
+            100, // profit sharing numerator
             1000, // profit sharing denominator
             true, // sell
             1e16, // sell floor
@@ -196,7 +196,7 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
             // for the peace of mind (in case something gets changed in between)
             uint256 needToWithdraw = amount.sub(entireBalance);
             uint256 toWithdraw = MathUpgradeable.min(rewardPoolBalance(), needToWithdraw);
-            IFairLaunch(rewardPool()).withdraw(msg.sender, poolId(), toWithdraw);
+            IFairLaunch(rewardPool()).withdraw(address(this), poolId(), toWithdraw);
             IVault(depositor()).withdraw(toWithdraw);
         }
         IBEP20(underlying()).safeTransfer(vault(), amount);
