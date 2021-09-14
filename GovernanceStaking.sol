@@ -4,11 +4,8 @@ pragma solidity 0.6.12;
 import "./Governable.sol";
 import "./NoMintRewardPool.sol";
 import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/IBEP20.sol";
-import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/SafeBEP20.sol";
 
 contract GovernaceStaking is Governable {
-  using SafeBEP20 for IBEP20;
-
   uint256 public lockPeriod;
   uint256 public depositTimestamp;
   uint256 public tokensLocked;
@@ -24,8 +21,8 @@ contract GovernaceStaking is Governable {
 
   function depositTokens(uint256 amount) public onlyGovernance {
     depositTimestamp = block.timestamp;
+    token.transferFrom(msg.sender, address(this), amount);
     tokensLocked += amount;
-    token.safeTransferFrom(msg.sender, address(this), amount);
   }
 
   function withdrawTokens() public onlyGovernance {
@@ -33,8 +30,9 @@ contract GovernaceStaking is Governable {
 
     uint256 unavailableTokens = tokensStaked;
     uint256 availableTokens = tokensLocked - unavailableTokens;
+    token.transfer(msg.sender, availableTokens);
+
     tokensLocked = unavailableTokens;
-    token.safeTransfer(msg.sender, availableTokens);
   }
 
   function stake(NoMintRewardPool pool, uint256 amount) public onlyGovernance {
@@ -42,7 +40,7 @@ contract GovernaceStaking is Governable {
 
     tokensStaked += amount;
 
-    token.safeApprove(address(pool), amount);
+    token.approve(address(pool), amount);
     pool.stake(amount);
 
     activePool = pool;

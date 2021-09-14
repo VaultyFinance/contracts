@@ -51,8 +51,9 @@ contract LPTokenWrapper {
         require(amount > 0, "Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
-        stakeTimestamp[msg.sender] = block.timestamp;
         lpToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        stakeTimestamp[msg.sender] = block.timestamp;
     }
 
     function withdrawTokens(uint256 amount) internal returns (uint256, uint256) {
