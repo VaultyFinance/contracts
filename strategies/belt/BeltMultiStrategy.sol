@@ -47,7 +47,7 @@ contract BeltMultiStrategy is BaseUpgradeableStrategy {
             _vault,
             _rewardPool,
             _rewardToken,
-            250, // profit sharing numerator
+            100, // profit sharing numerator
             1000, // profit sharing denominator
             true, // sell
             1e16, // sell floor

@@ -40,8 +40,8 @@ contract Vault is ERC20Upgradeable, IVault, IUpgradeSource, ControllableInit, Va
     require(_toInvestDenominator != 0, "cannot divide by 0");
 
     __ERC20_init(
-      string(abi.encodePacked("HOLVI_", ERC20Upgradeable(_underlying).symbol())),
-      string(abi.encodePacked("h", ERC20Upgradeable(_underlying).symbol()))
+      string(abi.encodePacked("VAULTY_", ERC20Upgradeable(_underlying).symbol())),
+      string(abi.encodePacked("v", ERC20Upgradeable(_underlying).symbol()))
     );
     _setupDecimals(ERC20Upgradeable(_underlying).decimals());
 

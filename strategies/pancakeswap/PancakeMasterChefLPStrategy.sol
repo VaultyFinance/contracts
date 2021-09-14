@@ -19,7 +19,7 @@ contract PancakeMasterChefLPStrategy is BaseUpgradeableStrategy {
     using SafeBEP20 for IBEP20;
 
     address public constant pancakeswapRouterV2 =
-        address(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
+        address(0x10ED43C718714eb63d5aA57B78B54704E256024E);
 
     // additional storage slots (on top of BaseUpgradeableStrategy ones) are defined here
     bytes32 internal constant _POOLID_SLOT =
@@ -52,7 +52,7 @@ contract PancakeMasterChefLPStrategy is BaseUpgradeableStrategy {
             _vault,
             _rewardPool,
             _rewardToken,
-            250, // profit sharing numerator
+            100, // profit sharing numerator
             1000, // profit sharing denominator
             true, // sell
             1e18, // sell floor
@@ -161,7 +161,6 @@ contract PancakeMasterChefLPStrategy is BaseUpgradeableStrategy {
 
         notifyProfitInRewardToken(rewardBalance);
         uint256 remainingRewardBalance = IBEP20(rewardToken()).balanceOf(address(this));
-
         if (remainingRewardBalance > 0) {
             if (isLpToken) {
                 _liquidateLpAssets(remainingRewardBalance);

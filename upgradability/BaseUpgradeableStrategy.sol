@@ -14,7 +14,7 @@ contract BaseUpgradeableStrategy is Initializable, ControllableInit, BaseUpgrade
   using SafeMath for uint256;
   using SafeBEP20 for IBEP20;
 
-  uint256 constant MAX_PROFIT_SHARING_NUMERATOR = 10; // setted only once during deployment and can be modified
+  uint256 constant MAX_PROFIT_SHARING_NUMERATOR = 100; // setted only once during deployment and can be modified
   event ProfitsNotCollected(bool sell, bool floor);
   event ProfitLogInReward(uint256 profitAmount, uint256 feeAmount, uint256 timestamp);
 

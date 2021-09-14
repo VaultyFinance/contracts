@@ -55,7 +55,7 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
             _vault,
             address(0xA625AB01B08ce023B2a342Dbb12a16f2C8489A8F), // _rewardPool ALPACA FairLaunch contract (staking contract)
             address(0x8F0528cE5eF7B51152A59745bEfDD91D97091d2F), // _rewardToken ALPACA token
-            90, // profit sharing numerator
+            100, // profit sharing numerator
             1000, // profit sharing denominator
             true, // sell
             1e16, // sell floor
@@ -74,8 +74,38 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
         return true;
     }
 
-    function rewardPoolBalance() internal view returns (uint256 bal) {
+    function rewardPoolBalance() public view returns (uint256) {
+        return IFairLaunch(rewardPool()).pendingAlpaca(poolId(), address(this));
+    }
+
+    function ibTokensStaked() public view returns (uint256 bal) {
         (bal, , , ) = IFairLaunch(rewardPool()).userInfo(poolId(), address(this));
+    }
+
+    function ibTokensBalance() public view returns (uint256) {
+        return IBEP20(depositorUnderlying()).balanceOf(address(this));
+    }
+
+    function ibTokensStakedInUnderlying() public view returns (uint256) {
+        return ibTokensToUnderlying(ibTokensStaked());
+    }
+
+    function ibTokensBalanceInUnderlying() public view returns (uint256) {
+        return ibTokensToUnderlying(ibTokensBalance());
+    }
+
+    function ibTokenPrice() internal view returns (uint256) {
+        return IVault(depositor()).totalToken().div(IVault(depositor()).totalSupply());
+    }
+
+    // return how many unerlying will be for ibTokens
+    function ibTokensToUnderlying(uint256 ibTokens) internal view returns (uint256) {
+        return ibTokenPrice().mul(ibTokens);
+    }
+
+    // how many ibTokens will be for underlying
+    function underlyingToIbTokens(uint256 val) internal view returns (uint256) {
+        return val.div(ibTokenPrice());
     }
 
     function unsalvagableTokens(address token) public view returns (bool) {
@@ -142,9 +172,16 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
     }
 
     function getUnderlyingFromDepositor() internal {
-        uint256 ibBalance = IBEP20(depositorUnderlying()).balanceOf(address(this));
-        if (ibBalance > 0) {
-            IVault(depositor()).withdraw(ibBalance);
+        uint256 ibTokensBalance = ibTokensBalance();
+        if (ibTokensBalance > 0) {
+            IVault(depositor()).withdraw(ibTokensBalance);
+        }
+    }
+
+    function unstakeAll() internal {
+        uint256 stakedBalance = ibTokensStaked();
+        if (stakedBalance > 0) {
+            IFairLaunch(rewardPool()).withdraw(address(this), poolId(), stakedBalance);
         }
     }
 
@@ -159,12 +196,12 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
             IVault(depositor()).deposit(underlyingBalance);
         }
 
-        uint256 ibTokenBalance = IBEP20(depositorUnderlying()).balanceOf(address(this));
+        uint256 ibTokensBalance = ibTokensBalance();
 
-        if (ibTokenBalance > 0) {
+        if (ibTokensBalance > 0) {
             IBEP20(depositorUnderlying()).safeApprove(rewardPool(), 0);
-            IBEP20(depositorUnderlying()).safeApprove(rewardPool(), ibTokenBalance);
-            IFairLaunch(rewardPool()).deposit(address(this), poolId(), ibTokenBalance);
+            IBEP20(depositorUnderlying()).safeApprove(rewardPool(), ibTokensBalance);
+            IFairLaunch(rewardPool()).deposit(address(this), poolId(), ibTokensBalance);
         }
     }
 
@@ -176,29 +213,38 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
             uint256 bal = rewardPoolBalance();
             if (bal != 0) {
                 claimAndLiquidateReward();
-                IFairLaunch(rewardPool()).withdraw(address(this), poolId(), bal);
             }
+            unstakeAll();
         }
         getUnderlyingFromDepositor();
         IBEP20(underlying()).safeTransfer(vault(), IBEP20(underlying()).balanceOf(address(this)));
     }
 
     /*
-     *   Withdraws all the asset to the vault
+     *   Withdraws amount of the asset to the vault
      */
     function withdrawToVault(uint256 amount) public restricted {
-        // Typically there wouldn't be any amount here
-        // however, it is possible because of the emergencyExit
-        uint256 entireBalance = IBEP20(underlying()).balanceOf(address(this));
+        uint256 availableBalance = IBEP20(underlying()).balanceOf(address(this));
 
-        if (amount > entireBalance) {
-            // While we have the check above, we still using SafeMath below
-            // for the peace of mind (in case something gets changed in between)
-            uint256 needToWithdraw = amount.sub(entireBalance);
-            uint256 toWithdraw = MathUpgradeable.min(rewardPoolBalance(), needToWithdraw);
-            IFairLaunch(rewardPool()).withdraw(msg.sender, poolId(), toWithdraw);
+        if (amount > availableBalance) {
+            uint256 needToWithdraw = underlyingToIbTokens(amount.sub(availableBalance));
+            uint256 ibTokensBalance_ = ibTokensBalance();
+            if (needToWithdraw > ibTokensBalance_) {
+                uint256 needToUnstake = needToWithdraw.sub(ibTokensBalance_);
+                uint256 toUnstake = MathUpgradeable.min(ibTokensStaked(), needToUnstake);
+                // unstaking to get new increased ibTokensBalance
+                IFairLaunch(rewardPool()).withdraw(address(this), poolId(), toUnstake);
+            }
+
+            uint256 newIbTokensBalance = ibTokensBalance();
+            uint256 toWithdraw = MathUpgradeable.min(
+                newIbTokensBalance,
+                needToWithdraw
+            );
+            // withdrawing ibTokens for underlying
             IVault(depositor()).withdraw(toWithdraw);
         }
+        uint256 availableBalance_ = IBEP20(underlying()).balanceOf(address(this));
         IBEP20(underlying()).safeTransfer(vault(), amount);
     }
 
@@ -208,13 +254,12 @@ contract AlpacaBaseStrategy is BaseUpgradeableStrategy {
      */
     function investedUnderlyingBalance() external view returns (uint256) {
         if (rewardPool() == address(0)) {
-            return IBEP20(underlying()).balanceOf(address(this));
+            return IBEP20(underlying()).balanceOf(address(this)).add(ibTokensBalanceInUnderlying());
         }
-        // Adding the amount locked in the reward pool and the amount that is somehow in this contract
-        // both are in the units of "underlying"
-        // The second part is needed because there is the emergency exit mechanism
-        // which would break the assumption that all the funds are always inside of the reward pool
-        return rewardPoolBalance().add(IBEP20(underlying()).balanceOf(address(this)));
+        return
+            IBEP20(underlying()).balanceOf(address(this)).add(ibTokensStakedInUnderlying()).add(
+                ibTokensBalanceInUnderlying()
+            );
     }
 
     /*
