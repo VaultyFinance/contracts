@@ -114,14 +114,14 @@ contract TokenVesting {
     }
 
     function tokensToClaim(address _beneficiary) public view returns(uint256) {        
-        (uint256 tokensAmount,) = _tokensToClaim(_beneficiary, claimInfo[_beneficiary]);
+        (uint256 tokensAmount,,) = _tokensToClaim(_beneficiary, claimInfo[_beneficiary]);
         return tokensAmount;
     }
 
     /**
         @dev This function returns tokensAmount available to claim. Calculates it based on several vesting periods if applicable.
      */
-    function _tokensToClaim(address _beneficiary, VestingClaimInfo memory claim) private view returns(uint256 tokensAmount, uint256 daysClaimed) {
+    function _tokensToClaim(address _beneficiary, VestingClaimInfo memory claim) private view returns(uint256 tokensAmount, uint256 daysClaimed, uint256 periodIndex) {
         uint256 lastClaim = claim.lastClaim;
         if (lastClaim == 0) { // first time claim, set it to a contract start time
             lastClaim = startTime;
@@ -129,7 +129,7 @@ contract TokenVesting {
 
         if (lastClaim > block.timestamp) {
             // has not started yet
-            return (0, 0);
+            return (0, 0, 0);
         }
 
         uint256 daysElapsed = (block.timestamp.sub(lastClaim)).div(1 days);
@@ -141,16 +141,18 @@ contract TokenVesting {
                 daysElapsed = daysElapsed.sub(lockingPeriod);
             } else {
                 // tokens are locked
-                return (0, 0);
+                return (0, 0, 0);
             }
         }
 
-        uint256 periodIndex = uint256(claim.periodIndex);
+        periodIndex = uint256(claim.periodIndex);
         uint256 totalPeriods = vestingPeriods[_beneficiary].length;
 
         // it's safe to assume that admin won't setup contract in such way, that this loop will be out of gas
         while (daysElapsed > 0 && totalPeriods > periodIndex) {
             VestingPeriod memory vestingPeriod = vestingPeriods[_beneficiary][periodIndex];
+
+            daysClaimed = claim.daysClaimed;
 
             uint256 daysInPeriodToClaim = uint256(vestingPeriod.vestingDays).sub(claim.daysClaimed);
             if (daysInPeriodToClaim > daysElapsed) {
@@ -165,8 +167,11 @@ contract TokenVesting {
             daysClaimed = daysClaimed.add(daysInPeriodToClaim);
             // at this point, if any days left to claim, it means that period was consumed
             // move to the next period
+            claim.daysClaimed = 0;
             periodIndex++;
         }
+
+        periodIndex--;
     }
 
     // claims vested tokens for a given beneficiary
@@ -206,14 +211,15 @@ contract TokenVesting {
     // Calculates the claimable tokens of a beneficiary and sends them.
     function _processClaim(address _beneficiary) internal {
         VestingClaimInfo memory claim = claimInfo[_beneficiary];
-        (uint256 amountToClaim, uint256 daysClaimed) = _tokensToClaim(_beneficiary, claim);
+        (uint256 amountToClaim, uint256 daysClaimed, uint256 periodIndex) = _tokensToClaim(_beneficiary, claim);
 
         if (amountToClaim == 0) {
             return;
         }
 
-        claim.daysClaimed = uint64(uint256(claim.daysClaimed).add(daysClaimed));
+        claim.daysClaimed = uint64(daysClaimed);
         claim.lastClaim = uint128(block.timestamp);
+        claim.periodIndex = uint64(periodIndex);
         claimInfo[_beneficiary] = claim;
 
         _sendTokens(_beneficiary, amountToClaim);
