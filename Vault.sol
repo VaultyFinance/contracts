@@ -284,6 +284,7 @@ contract Vault is ERC20Upgradeable, IVault, IUpgradeSource, ControllableInit, Va
       if (numberOfShares == totalSupply) {
         IStrategy(strategy()).withdrawAllToVault();
       } else {
+        
         uint256 missing = underlyingAmountToWithdraw.sub(underlyingBalanceInVault());
         IStrategy(strategy()).withdrawToVault(missing);
       }

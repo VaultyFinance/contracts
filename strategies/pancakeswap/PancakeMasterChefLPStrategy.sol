@@ -1,4 +1,4 @@
-pragma solidity >=0.6.0;
+pragma solidity 0.6.12;
 
 import "./interface/IMasterChef.sol";
 import "../../interfaces/IStrategy.sol";

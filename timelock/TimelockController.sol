@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.6.12;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
 
 import "./openzeppelin/AccessControl.sol";
 
@@ -60,11 +59,11 @@ contract TimelockController is AccessControl {
     /**
      * @dev Initializes the contract with a given `minDelay`.
      */
-    constructor (
+    constructor(
         uint256 minDelay,
         address[] memory proposers,
         address[] memory executors
-    ) public {
+    ) {
         _setRoleAdmin(TIMELOCK_ADMIN_ROLE, TIMELOCK_ADMIN_ROLE);
         _setRoleAdmin(PROPOSER_ROLE, TIMELOCK_ADMIN_ROLE);
         _setRoleAdmin(EXECUTOR_ROLE, TIMELOCK_ADMIN_ROLE);
@@ -269,7 +268,7 @@ contract TimelockController is AccessControl {
         bytes32 salt
     ) public payable virtual onlyRoleOrOpenRole(EXECUTOR_ROLE) {
         bytes32 id = hashOperation(target, value, data, predecessor, salt);
-        _beforeCall(predecessor);
+        _beforeCall(id, predecessor);
         _call(id, 0, target, value, data);
         _afterCall(id);
     }
@@ -294,7 +293,7 @@ contract TimelockController is AccessControl {
         require(targets.length == datas.length, "TimelockController: length mismatch");
 
         bytes32 id = hashOperationBatch(targets, values, datas, predecessor, salt);
-        _beforeCall(predecessor);
+        _beforeCall(id, predecessor);
         for (uint256 i = 0; i < targets.length; ++i) {
             _call(id, i, targets[i], values[i], datas[i]);
         }
@@ -304,7 +303,8 @@ contract TimelockController is AccessControl {
     /**
      * @dev Checks before execution of an operation's calls.
      */
-    function _beforeCall(bytes32 predecessor) private view {
+    function _beforeCall(bytes32 id, bytes32 predecessor) private view {
+        require(isOperationReady(id), "TimelockController: operation is not ready");
         require(predecessor == bytes32(0) || isOperationDone(predecessor), "TimelockController: missing dependency");
     }
 
